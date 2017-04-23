@@ -1,0 +1,381 @@
+<html>
+<head>
+        <title>Shapes and Stuff</title>
+        <style>canvas { width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;}</style>
+</head>
+<body>
+ 
+
+
+
+<script src="three.min.js"></script>
+<script>
+
+
+
+	function loadFile(filePath) {
+		  var result = null;
+		  var xmlhttp = new XMLHttpRequest();
+		  xmlhttp.open("GET", filePath, false);
+		  xmlhttp.send();
+		  if (xmlhttp.status==200) {
+		    result = xmlhttp.responseText;
+		  }
+		  return result;
+		}
+		
+
+	var gcode_commands = [ ];
+
+
+	var actions = [  ];
+
+	
+	sample_gcode = loadFile("http://sulicat.com/gsim/GCODE/Sample.gcode");
+	
+	var start_sentence = 0;
+	var comment = false;
+
+	
+	                                            
+	                                            
+
+        var config = {  "printer_bed_width"     :800, 
+                        "printer_bed_height"    :1200,
+                        "printer_bed_depth"     :800,
+                        "gravity"               :1                   };
+                        
+                        
+        var printer_speed = 1;                
+                        
+
+
+
+        var global_rotation_x = 0;
+        var global_rotation_y = 0;
+        var global_rotation_z = 0;
+        var global_rotation = 0;
+
+
+
+
+        var scene, camera, renderer;
+        var geometry, material, mesh;
+
+        var particles = [  ];
+
+
+	var printer_head;
+	
+	var printer_head_x = 0;
+	var printer_head_y = 0;
+	var printer_head_z = 0;
+	
+	var printer_head_x_target = 0;
+	var printer_head_y_target = 0;
+	var printer_head_z_target = 0;
+	
+	
+	var i = 0;
+
+
+        init();
+        animate();
+
+        function init() {
+
+
+			for( var i = 0; i < sample_gcode.length; i++ ){
+	
+				if( sample_gcode.substring(i,i+1) != ";" && comment == false){
+					for( var j = i; j < sample_gcode.length; j++ ){
+						if( sample_gcode.substring(j,j+1) == "\n" ){
+							
+							if(sample_gcode.substring(i-1,i) != ";"){
+								gcode_commands.push( sample_gcode.substring(i-1,j) );
+							}
+							i = j+1;
+							break;
+						}
+					}
+				}else if( sample_gcode.substring(i,i+1) != "\n" ){
+					comment = false;
+				}else{
+					comment = true;
+				}
+			}
+			
+		
+		
+			var temp_x = "";
+			var temp_y = "";
+			var temp_z = "";
+			
+			var temp_e = "";
+			
+			for( var i = 0; i < gcode_commands.length; i++ ){
+				
+				for( var j = 0; j < gcode_commands[i].length; j++ ){
+					
+					if( gcode_commands[i].substring( j, j+1 ) == "X" ){
+						j++;
+						while(gcode_commands[i].substring( j, j+1 ) != " "){
+							
+							temp_x += gcode_commands[i].substring( j, j+1 );
+							
+							j++;
+						}
+					
+					}else if( gcode_commands[i].substring( j, j+1 ) == "Y" ){
+						
+						j++;
+						while(gcode_commands[i].substring( j, j+1 ) != " "){
+							
+							temp_y += gcode_commands[i].substring( j, j+1 );
+							
+							j++;
+						}
+						
+						
+					
+					}else if( gcode_commands[i].substring( j, j+1 ) == "E" ){
+						j++;
+						while(gcode_commands[i].substring( j, j+1 ) != " " && j < gcode_commands[i].length - 1 ){
+							
+							temp_e += gcode_commands[i].substring( j, j+1 );
+							
+							j++;
+						}
+				
+					}else if( gcode_commands[i].substring( j, j+1 ) == "Z" ){
+						j++;
+						while(gcode_commands[i].substring( j, j+1 ) != " "){
+							
+							temp_z += gcode_commands[i].substring( j, j+1 );
+							
+							j++;
+						}
+					}
+				}
+				
+				actions.push( { "x":temp_x, "y":temp_y, "z":temp_z, "e":temp_e } );
+				temp_x = "";
+				temp_y = "";
+				temp_z = "";
+				temp_e = "";
+			}
+			
+
+	
+
+                scene = new THREE.Scene();
+
+                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 10000 );
+                camera.position.z = 1000;
+
+
+
+                geometry = new THREE.BoxGeometry( config.printer_bed_width, config.printer_bed_height, config.printer_bed_depth );
+                material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true,  wireframe_linewidth: 10 } );
+                mesh = new THREE.Mesh( geometry, material );
+                scene.add( mesh );
+                
+                
+                
+                
+                geometry = new THREE.BoxGeometry( config.printer_bed_width, config.printer_bed_height*0.05, config.printer_bed_depth );
+		material = new THREE.MeshBasicMaterial( { color: 0x003399, wireframe: false,  wireframe_linewidth: 10 } );
+                mesh = new THREE.Mesh( geometry, material );
+                mesh.position.y = config.printer_bed_height/2 + config.printer_bed_height*0.025;
+                scene.add( mesh );
+                
+                
+                var geometry = new THREE.CylinderGeometry(3, 9, 50, 5);
+		material = new THREE.MeshNormalMaterial( { color: 0xff00ff, wireframe: false,  wireframe_linewidth: 10 } );
+		printer_head = new THREE.Mesh(geometry, material);
+		scene.add( printer_head );
+
+
+                geometry = new THREE.SphereGeometry( 75, 20, 10 );
+                material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true } );
+
+                mesh = new THREE.Mesh( geometry, material );
+                
+                for( var i = 0; i < 0; i++ ){
+                        particles.push( {"x":Math.random() * 1500 - 750, "y":Math.random() * 1500 - 750, "size":30 } );                
+                }
+
+                for( var i = 0; i < 0; i++ ){
+                        geometry = new THREE.SphereGeometry( particles[i].size, 6, 6 );
+                        material = new THREE.MeshBasicMaterial( { color: 0x336600, wireframe: true } );
+                        mesh = new THREE.Mesh( geometry, material );
+                        mesh.position.x = particles[i].x
+                        mesh.position.y = particles[i].y;
+                        mesh.position.z = Math.random() * 500 - 750;
+                        
+                        scene.add( mesh );
+
+                }
+
+                        
+
+
+
+
+
+
+                renderer = new THREE.WebGLRenderer();
+                renderer.setSize( window.innerWidth, window.innerHeight );
+
+                document.body.appendChild( renderer.domElement );
+
+        }
+
+
+
+        var pivot = new THREE.Group();
+        scene.add( pivot );
+
+	
+
+	var count_done = 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        function animate() {
+        
+       
+                requestAnimationFrame( animate );
+
+                scene.rotation.x = 60;
+                scene.position.z = -500;
+ 
+                scene.rotation.y += 0.001;
+
+                global_rotation += 0.05;
+
+
+
+		if( actions[i].x != null && actions[i].x != "" ){
+			//printer_head_x_target = parseInt(actions[i].x) - config.printer_bed_width/2;
+			printer_head_x_target = parseInt(10 * actions[i].x);
+			
+		}else{
+			printer_head_x_target = printer_head_x_target;
+		}
+			
+		if( actions[i].y != null && actions[i].y != "" ){	
+		//	printer_head_y_target = parseInt(actions[i].y)  + config.printer_bed_height/2 - 20;
+			printer_head_y_target = parseInt(actions[i].y)  + config.printer_bed_height/2 - 65;
+		}else{
+			printer_head_y_target = printer_head_y_target;
+		}
+			
+		if( actions[i].z != null && actions[i].z != "" ){	
+			printer_head_z_target = parseInt(10 * actions[i].z);
+		}else{
+			printer_head_z_target = printer_head_z_target;
+		}
+			
+			
+		
+		/*printer_head_x_target = printer_head_x_target - config.printer_bed_width/2;
+		printer_head_y_target = printer_head_y_target + config.printer_bed_height/2 - 20;
+		printer_head_z_target = printer_head_z_target - config.printer_bed_depth/2;
+		*/
+		
+		
+		if( printer_head_x != printer_head_x_target && printer_head_x > printer_head_x_target ){
+			printer_head_x -= printer_speed;
+	
+		}else if( printer_head_x != printer_head_x_target && printer_head_x < printer_head_x_target ){
+			printer_head_x += printer_speed;
+	
+		}else if( Math.abs(printer_head_x - printer_head_x_target) <= printer_speed ){
+			if( count_done >= 3 ){
+				if( i < actions.length - 1 )	
+					i++;
+				count_done = 0;
+				console.log("x: " + printer_head_x_target);
+				console.log("y: " + printer_head_y_target);
+				console.log("z: " + printer_head_z_target);
+				console.log( "E: " + actions[i].e );
+				
+			}else {
+				count_done += 1;
+			}
+		}
+		
+		
+		
+		
+		
+		if( printer_head_y != printer_head_y_target && printer_head_x > printer_head_y_target ){
+			printer_head_y -= printer_speed;
+	
+		}else if( printer_head_y != printer_head_y_target && printer_head_y < printer_head_y_target ){
+			printer_head_y += printer_speed;
+	
+		}else if( Math.abs(printer_head_y - printer_head_y_target) <= printer_speed ){
+			if( count_done >= 3 ){
+				if( i < actions.length - 1 )		
+					i++;
+				count_done = 0;
+			}else {
+				count_done += 1;
+			}
+		}
+		
+		
+		
+		
+		
+		if( printer_head_z != printer_head_z_target && printer_head_z > printer_head_z_target ){
+			printer_head_z -= printer_speed;
+	
+		}else if( printer_head_z != printer_head_z_target && printer_head_z < printer_head_z_target ){
+			printer_head_z += printer_speed;
+	
+		}else if( Math.abs(printer_head_z - printer_head_z_target) <= printer_speed ){
+			if( count_done >= 3 ){
+				if( i < actions.length - 1 )	
+					i++;
+				count_done = 0;
+			}else {
+				count_done += 1;
+			}
+		}
+		
+		
+		
+		
+		printer_head.position.x = printer_head_x;
+		printer_head.position.y = printer_head_y;
+		printer_head.position.z = printer_head_z;
+
+
+
+
+
+
+
+                renderer.render( scene, camera );
+
+        }
+
+</script>
+
+</body>
+</html>
+
